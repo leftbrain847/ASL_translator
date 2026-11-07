@@ -1,0 +1,5 @@
+{
+  "appId": "com.example.apps.asl_translator",
+  "appName": "ASL Translator",
+  "webDir": "dist/play"
+}

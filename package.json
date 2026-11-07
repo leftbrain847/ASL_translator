@@ -1,0 +1,31 @@
+{
+  "name": "asl-translator",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "build:play": "VITE_TARGET=play vite build && node scripts/check-play-bundle.mjs",
+    "build:demo": "vite build -c demo/vite.config.ts && node demo/inline.mjs",
+    "snapshot": "npm run build:demo && node demo/snapshot.mjs",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "worker:dev": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "smoke": "node scripts/smoke.mjs",
+    "build:web": "vite build -c web/vite.config.ts && node web/inline.mjs"
+  },
+  "dependencies": {
+    "@app-builder/client-sdk": "file:platform/client-sdk",
+    "@app-builder/host": "file:platform/host",
+    "@mediapipe/tasks-vision": "0.10.35"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20261104.1",
+    "typescript": "5.9.3",
+    "vite": "7.3.7",
+    "vitest": "5.1.0",
+    "wrangler": "4.158.0"
+  }
+}
