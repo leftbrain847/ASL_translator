@@ -1,0 +1,17 @@
+node_modules/
+dist/
+*.log
+.vite/
+coverage/
+.claude/worktrees/
+
+# Secrets and local Cloudflare state: never committed.
+.dev.vars
+.dev.vars.*
+.env
+.env.*
+.wrangler/
+
+# Android signing material: never committed.
+*.jks
+*.keystore
