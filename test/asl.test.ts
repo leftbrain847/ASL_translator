@@ -50,6 +50,7 @@ describe('hand model', () => {
 
 describe('English → ASL gloss', () => {
   it('drops articles and "be", and keeps known signs', () => expect(gl('I am a student and the dog is happy')).toBe('ME DOG HAPPY'));
+  it('does not sign "it" as a person', () => expect(gl('Is it hot?')).toBe('HOT'));
   it('moves question words to the end and furrows the brows', () => {
     expect(gl('What is your name?')).toBe('YOUR NAME WHAT');
     expect(gl('Where is the bathroom?')).toBe('BATHROOM WHERE');
@@ -82,6 +83,7 @@ describe('ASL gloss → English', () => {
     expect(en.fromGlosses(['ME', 'NOT', 'UNDERSTAND'])).toBe("I don't understand.");
     expect(en.fromGlosses(['HELLO'])).toBe('Hello.');
     expect(en.fromGlosses(['ME', 'EAT', 'FINISH'])).toBe('I eat already.');
+    expect(en.fromGlosses(['TOMORROW', 'ME', 'GO', 'SCHOOL'])).toBe('Tomorrow I go school.');
   });
 });
 

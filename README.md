@@ -49,6 +49,7 @@ To add a sign, add an entry to `lexicon.ts`. The avatar can then perform it, and
 
 - Video never leaves the device. Frames go to MediaPipe's on-device models in the browser.
 - Speech input uses the browser's speech recognition. In Chrome that sends audio to Google's speech service, and in Safari to Apple's. Typing works without it.
+- Speaking aloud uses the browser's voices, preferring one that runs on the device. If only cloud voices exist (some Chrome setups), the spoken text goes to that voice service.
 - [MediaPipe Tasks Vision](https://www.npmjs.com/package/@mediapipe/tasks-vision) 0.10.35 (Apache-2.0) is bundled into the public page. Its WebAssembly runtime (jsDelivr) and its hand and pose models (Google's model storage) load from version-pinned URLs only after the viewer allows the camera.
   - The version is pinned deliberately. MediaPipe 1.x adds a usage logger that posts to `odml.pa.googleapis.com` every 60 seconds with no switch to turn it off; 0.10.35 has none.
   - Re-check for that logger before upgrading: `grep odml node_modules/@mediapipe/tasks-vision/vision_bundle.mjs`.

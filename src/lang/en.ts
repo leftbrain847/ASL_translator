@@ -8,7 +8,7 @@ import type { SignDef } from '../asl/sign';
 import type { SignLanguage, SpokenLanguage, Token, Translation } from './types';
 
 /** Words ASL leaves out. */
-const DROP = new Set(['a', 'an', 'the', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'to', 'of', 'do', 'does', 'did',
+const DROP = new Set(['it', 'a', 'an', 'the', 'am', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'to', 'of', 'do', 'does', 'did',
   'um', 'uh', 'so', 'very', 'really', 'just', 'and', 'that', 'this', 'at', 'in', 'on', 'for', 'some', 'any']);
 
 /** Whole phrases with a set ASL rendering (checked before single words). */
@@ -131,10 +131,12 @@ export const english: SpokenLanguage = {
   fromGlosses(glosses: readonly string[]): string {
     if (!glosses.length) return '';
     const g = [...glosses];
+    // The subject is the first sign after any time signs ("TOMORROW ME GO" → "tomorrow I go").
+    const subject = g.findIndex((x) => !TIME.has(x));
     const word = (x: string, i: number): string => {
       switch (x) {
-        case 'ME': return i === 0 ? 'I' : 'me';
-        case 'HE-SHE': return i === 0 ? 'they' : 'them';
+        case 'ME': return i === subject || i === 0 ? 'I' : 'me';
+        case 'HE-SHE': return i === subject || i === 0 ? 'they' : 'them';
         case 'I-LOVE-YOU': return 'I love you';
         case 'THANK-YOU': return 'thank you';
         case 'CANT': return "can't";

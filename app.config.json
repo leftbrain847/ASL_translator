@@ -2,7 +2,7 @@
   "$comment": "Everything tunable about this app lives here. create-app fills id, title and mode; the rest has defaults.",
   "id": "asl-translator",
   "title": "ASL Translator",
-  "publicUrl": "https://leftbrain847.github.io/november_sprint/asl-translator-latest.html",
+  "publicUrl": "https://leftbrain847.github.io/asl_translator/",
   "mode": "solo",
   "host": {
     "emptyRoomTtlMs": 300000

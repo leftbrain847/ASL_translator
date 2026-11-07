@@ -16,7 +16,9 @@ import { canListen, canSpeak, listen, speak, type Listener } from './speech';
 import { render } from './ui';
 import type { Tracker } from './vision';
 
-const LIVE_CAMERA = import.meta.env.VITE_TARGET !== 'play';
+// Only the public web build loads camera tracking: its runtime and models come from pinned CDN URLs, which the
+// friends host's 'self'-only CSP (and the offline demo) can't load.
+const LIVE_CAMERA = import.meta.env.VITE_TARGET === 'web';
 
 /** UI settings. */
 export const UI = {
@@ -94,7 +96,7 @@ function app(): HTMLElement {
   const video = h('video', { class: 'cam', playsinline: true, muted: true, autoplay: true, 'aria-label': 'Your camera' });
   const overlay = h('canvas', { class: 'cam-overlay', 'aria-hidden': 'true' });
   const camStart = h('button', { class: 'primary' }, [LIVE_CAMERA ? 'Start camera' : 'Live camera is on the public page']);
-  const camStatus = h('p', { class: 'cam-status', 'aria-live': 'polite' }, [LIVE_CAMERA ? 'Your video stays on this device.' : 'This copy runs offline, so it has no camera. Try the self-test below.']);
+  const camStatus = h('p', { class: 'cam-status', 'aria-live': 'polite' }, [LIVE_CAMERA ? 'Your video stays on this device.' : 'This copy has no live camera. Try the self-test below.']);
   const meter = h('div', { class: 'meter', 'aria-hidden': 'true' }, [h('span')]);
   const camBox = h('div', { class: 'camera' }, [video, overlay, h('div', { class: 'cam-cta' }, [camStart, camStatus]), meter]);
   const english = h('p', { class: 'english', 'aria-live': 'polite' }, ['Sign, then pause or lower your hands.']);
@@ -103,13 +105,14 @@ function app(): HTMLElement {
   const voiceBtn = h('button', { class: 'pill', 'aria-pressed': String(canSpeak()) }, ['Speak aloud']);
   const leftBtn = h('button', { class: 'pill', 'aria-pressed': 'false' }, ['Left-handed']);
   const clearBtn = h('button', { class: 'pill' }, ['Clear']);
+  const stopBtn = h('button', { class: 'pill', hidden: true }, ['Stop camera']);
   const testCanvas = h('canvas', { class: 'avatar small', 'aria-label': 'Avatar signing for the self-test' });
   const testBtn = h('button', { class: 'pill' }, ['Run self-test']);
   const testOut = h('p', { class: 'test-out', 'aria-live': 'polite' });
   const readPanel = h('section', { class: 'panel', id: 'panel-read', role: 'tabpanel', 'aria-labelledby': 'tab-read', hidden: true }, [
     camBox,
     h('div', { class: 'readout' }, [english, readChips]),
-    h('div', { class: 'row' }, [voiceBtn, leftBtn, clearBtn]),
+    h('div', { class: 'row' }, [voiceBtn, leftBtn, clearBtn, stopBtn]),
     history,
     h('div', { class: 'card selftest' }, [
       h('div', { class: 'card-text' }, [
@@ -142,6 +145,7 @@ function app(): HTMLElement {
   const setTab = (read: boolean) => {
     tabSpeak.setAttribute('aria-selected', String(!read));
     tabRead.setAttribute('aria-selected', String(read));
+    if (!read) stopCamera();
     speakPanel.hidden = read;
     readPanel.hidden = !read;
     requestAnimationFrame(() => { avatar.resize(); testAvatar.resize(); });
@@ -266,6 +270,26 @@ function app(): HTMLElement {
   // Live camera (public web build only).
   let tracker: Tracker | null = null;
   let camRec: Recognizer | null = null;
+  let stream: MediaStream | null = null;
+  /** Turn the camera off (button, tab switch, or the page going to the background). */
+  const stopCamera = () => {
+    if (!stream && !tracker) return;
+    const rest = camRec?.flush();
+    if (rest) finishPhrase(rest);
+    stream?.getTracks().forEach((t) => t.stop());
+    stream = null;
+    video.srcObject = null;
+    tracker?.close();
+    tracker = null;
+    camRec = null;
+    camBox.classList.remove('live');
+    stopBtn.hidden = true;
+    camStart.disabled = false;
+    camStatus.textContent = 'Camera off. Your video stays on this device.';
+    ctxO?.clearRect(0, 0, overlay.width, overlay.height);
+  };
+  on(stopBtn, 'click', stopCamera);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) stopCamera(); });
   let lastPartial = 0;
   on(camStart, 'click', async () => {
     if (!LIVE_CAMERA) {
@@ -277,15 +301,18 @@ function app(): HTMLElement {
     try {
       if (!navigator.mediaDevices?.getUserMedia) throw new Error('This browser can’t open the camera.');
       camStatus.textContent = 'Asking for the camera…';
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+      stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
       video.srcObject = stream;
       await video.play().catch(() => undefined);
       const vision = await import('./vision');
       tracker = await vision.createTracker((s) => { camStatus.textContent = s; });
       camRec = new Recognizer(signLang.lexicon);
       camBox.classList.add('live');
+      stopBtn.hidden = false;
       camStatus.textContent = 'Show your head, shoulders and hands. Pause or lower your hands to finish a phrase.';
     } catch (e) {
+      stream?.getTracks().forEach((t) => t.stop());
+      stream = null;
       camStart.disabled = false;
       const name = (e as { name?: string }).name;
       camStatus.textContent = name === 'NotAllowedError' ? 'Camera access was blocked. Allow it in the browser settings to read signs.'

@@ -27,7 +27,7 @@ export const RECOGNIZER = {
   shapeLever: 0.12,
   /** Stillness that ends a phrase (seconds), and the longest phrase decoded at once. */
   phrasePause: 0.7,
-  maxPhrase: 12,
+  maxPhrase: 30,
   /** Frames per second the decoder looks at. */
   decodeFps: 15,
   /** Decoder costs: per filler frame, per sign inserted, per template sample stacked on one frame. */

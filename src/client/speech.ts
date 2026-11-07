@@ -62,6 +62,9 @@ export function speak(text: string, lang: string): void {
   const u = new SpeechSynthesisUtterance(text);
   u.lang = lang;
   u.rate = 1;
+  // Prefer an on-device voice, so recognized text isn't sent to a cloud voice service when a local one exists.
+  const local = window.speechSynthesis.getVoices().find((v) => v.localService && v.lang.toLowerCase().startsWith(lang.slice(0, 2).toLowerCase()));
+  if (local) u.voice = local;
   window.speechSynthesis.cancel();
   window.speechSynthesis.speak(u);
 }

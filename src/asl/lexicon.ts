@@ -52,7 +52,7 @@ export const LEXICON: readonly SignDef[] = [
     dom: { shape: 'B', palm: 'back', fingers: 'in+up', loc: 'chest', contact: 'palm', path: 'tap', reps: 1 } },
   { gloss: 'YOUR', en: ['your', 'yours'], how: 'Flat palm pushes toward the person.',
     dom: { shape: 'B', palm: 'fwd', fingers: 'up', loc: 'neutral', contact: 'palm', to: { move: 'fwd', dist: 0.15 } } },
-  { gloss: 'HE-SHE', en: ['he', 'she', 'him', 'her', 'it', 'they', 'them'], how: 'Index points off to the side (a place in space for that person).',
+  { gloss: 'HE-SHE', en: ['he', 'she', 'him', 'her', 'they', 'them'], how: 'Index points off to the side (a place in space for that person).',
     dom: { shape: '1', palm: 'down', fingers: 'out+fwd', loc: 'neutral', to: { move: 'out+fwd', dist: 0.18 } } },
   { gloss: 'WE', en: ['we', 'us', 'our'], how: 'Index touches one side of the chest, arcs to the other.',
     dom: { shape: '1', palm: 'back', fingers: 'up', loc: 'chestSide', path: 'arc', axis: 'fwd', to: { loc: 'chest', move: 'in', dist: 0.36 } } },
