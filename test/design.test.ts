@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { LEXICON } from '../src/asl/lexicon';
 import { signParts } from '../src/asl/parts';
-import { ghostAt, trail, type Past } from '../src/client/avatar';
+import { ghostAt, scaleHand, trail, type Past } from '../src/client/avatar';
 import type { Landmarks } from '../src/asl/hand';
 
 describe('sign parts (Hand / Where / Move / Palm chips)', () => {
@@ -25,7 +25,7 @@ describe('sign parts (Hand / Where / Move / Palm chips)', () => {
 
 describe('stage motion helpers', () => {
   const lm = (x: number): Landmarks => Array.from({ length: 21 }, () => [x, 0, 0]) as unknown as Landmarks;
-  const hist: Past[] = [0, 100, 200, 300, 400].map((at) => ({ at, lm: lm(at) }));
+  const hist: Past[] = [0, 100, 200, 300, 400].map((at) => ({ at, lm: lm(at), up: true }));
   it('ghosts come from the frame nearest the asked-for time, and only once history reaches back that far', () => {
     expect(ghostAt(hist, 400, 160)?.at).toBe(200);
     expect(ghostAt(hist, 400, 320)?.at).toBe(100);
@@ -33,5 +33,11 @@ describe('stage motion helpers', () => {
   });
   it('the trail is the palm path over the window, oldest first', () => {
     expect(trail(hist, 400, 250).map((p) => p[0])).toEqual([200, 300, 400]);
+  });
+  it('the drawn hand is scaled about its wrist', () => {
+    const hand = Array.from({ length: 21 }, (_, i) => [1 + i, 2, 0]) as unknown as Landmarks;
+    const big = scaleHand(hand, 2);
+    expect(big[0]).toEqual([1, 2, 0]);
+    expect(big[9]).toEqual([19, 2, 0]);
   });
 });

@@ -1,25 +1,36 @@
 /**
  * The signing stage: arms and hands only, as flat silhouettes drawn on a canvas from motion.ts frames (see
- * docs/DESIGN.md). Forearms rise from below the frame to each wrist. The dominant arm is light ink, the
- * other dim; two ghost frames and a dotted trail show the movement, and an accent ring marks where the sign is made.
+ * docs/DESIGN.md). Arms are solved with two-bone IK from shoulder to wrist; the shoulders sit either side just
+ * below the head guide. The dominant arm is light ink, the other dim; two ghost frames and a dotted trail show the
+ * movement, and an accent ring marks where the sign is made. The view looks down a little, so a palm held flat
+ * shows as a foreshortened palm rather than an edge.
  */
-import { BASE_LOCS, LOCATIONS, type Loc } from '../asl/body';
+import { BASE_LOCS, FOREARM, LOCATIONS, SHOULDER, UPPER_ARM, type Loc } from '../asl/body';
 import type { Landmarks } from '../asl/hand';
 import type { Frame } from '../asl/motion';
-import type { V3 } from '../asl/vec';
+import { add, cross, dot, len, norm, scale, sub, type V3 } from '../asl/vec';
 
 /** Drawing settings: proportions in body units, colors from CSS tokens. */
 export const AVATAR = {
   perspective: 3.4,
   headCenter: [0, 0.86, 0] as V3,
   headRadius: [0.25, 0.31] as const,
-  forearmWidth: 0.15,
-  fingerWidth: 0.047,
-  thumbWidth: 0.053,
-  /** Forearms only: each rises from a fixed point just below the stage (body units out from the middle), widening a
-   * little toward it, so the arms read as coming from below the frame. */
-  forearmWiden: 1.45,
-  armAnchorX: 0.85,
+  /** Mirror view: the signer's right hand is drawn on the viewer's right, like following along in a mirror. */
+  mirror: true,
+  /** The camera looks down by this angle (radians), so depth shows: a flat palm reads as a palm. */
+  viewTilt: 0.42,
+  upperArmWidth: 0.17,
+  forearmWidth: 0.14,
+  /** Hands are drawn larger than life around the wrist, so the palm is ~40% of the forearm, as in the design. */
+  handScale: 1.3,
+  fingerWidth: 0.033,
+  thumbWidth: 0.038,
+  /** The thin background gap drawn around each finger, in px, so the fingers read as separate. */
+  fingerGap: 1.6,
+  /** Elbow pole: elbows hang down, a little out and back. */
+  elbowPole: [0.3, -1.2, 0.5] as V3,
+  /** A hand that isn't up in signing space is drawn as a soft fist (body units). */
+  fist: { length: 0.22, width: 0.18, radius: 0.07 },
   /** Ghost frames: how long ago (ms) and how strong. */
   ghosts: [{ agoMs: 320, alpha: 0.14 }, { agoMs: 160, alpha: 0.28 }],
   /** The dotted trail follows the dominant palm over this window. */
@@ -29,16 +40,36 @@ export const AVATAR = {
   ringRadius: 0.09,
 };
 
-interface Colors { ink: string; dim: string; guide: string; accent: string; glow: string }
+interface Colors { ink: string; dim: string; guide: string; accent: string; glow: string; bg: string }
 
 function readColors(el: HTMLElement): Colors {
   const cs = getComputedStyle(el);
   const v = (n: string, d: string) => cs.getPropertyValue(n).trim() || d;
-  return { ink: v('--ink', '#ecebe8'), dim: v('--ink-dim', '#3a3d45'), guide: v('--guide', '#2a2d34'), accent: v('--accent', '#6ea8fe'), glow: v('--glow', '#23262e') };
+  return { ink: v('--ink', '#ecebe8'), dim: v('--ink-dim', '#3a3d45'), guide: v('--guide', '#2a2d34'), accent: v('--accent', '#6ea8fe'), glow: v('--glow', '#23262e'), bg: v('--bg', '#0e0f12') };
+}
+
+/** Elbow position for a shoulder and wrist (2-bone IK; the pole sets which way the elbow bends). */
+export function elbow(shoulder: V3, wrist: V3, left: boolean): V3 {
+  const a = UPPER_ARM, b = FOREARM;
+  const d0 = sub(wrist, shoulder);
+  const d = Math.min(len(d0), a + b - 1e-3);
+  const dir = norm(d0);
+  const along = (a * a - b * b + d * d) / (2 * d);
+  const h = Math.sqrt(Math.max(0, a * a - along * along));
+  const pole: V3 = [AVATAR.elbowPole[0] * (left ? -1 : 1), AVATAR.elbowPole[1], AVATAR.elbowPole[2]];
+  let pp = sub(pole, scale(dir, dot(pole, dir)));
+  if (len(pp) < 1e-6) pp = cross(dir, [0, 0, 1]);
+  return add(add(shoulder, scale(dir, along)), scale(norm(pp), h));
+}
+
+/** Pure: a hand's landmarks scaled about its wrist (the drawn hand is larger than life). */
+export function scaleHand(lm: Landmarks, k: number): Landmarks {
+  const w = lm[0]!;
+  return lm.map((q) => add(w, scale(sub(q, w), k))) as unknown as Landmarks;
 }
 
 /** One remembered frame of the dominant hand, for ghosts and the trail. */
-export interface Past { at: number; lm: Landmarks }
+export interface Past { at: number; lm: Landmarks; up: boolean }
 
 /** Pure: the remembered frame closest to `agoMs` before `now`, if the history reaches back that far. */
 export function ghostAt(history: readonly Past[], now: number, agoMs: number): Past | null {
@@ -92,16 +123,18 @@ export class Avatar {
     this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     this.ghostCanvas.getContext('2d')?.setTransform(dpr, 0, 0, dpr, 0, 0);
     // Frame the head guide and the signing space.
-    this.S = Math.min(this.w / 2.4, this.h / 2.75);
+    this.S = Math.min(this.w / 2.7, this.h / 2.45);
     this.cx = this.w / 2;
     // the head guide's top sits just inside the stage
-    this.cy = this.S * (AVATAR.headCenter[1] + AVATAR.headRadius[1] + 0.05) + this.h * 0.06;
+    this.cy = this.S * (AVATAR.headCenter[1] * Math.cos(AVATAR.viewTilt) + AVATAR.headRadius[1] + 0.05) + this.h * 0.05;
   }
 
   /** Body space → screen. The signer faces the viewer, so their right is on the viewer's left. */
   private p(b: V3): { x: number; y: number; k: number } {
-    const k = AVATAR.perspective / (AVATAR.perspective + b[2]);
-    return { x: this.cx - b[0] * this.S * k, y: this.cy - (b[1] + 0.05) * this.S * k, k };
+    const c = Math.cos(AVATAR.viewTilt), s = Math.sin(AVATAR.viewTilt);
+    const y = b[1] * c + b[2] * s, z = -b[1] * s + b[2] * c;   // looking down: nearer points sit lower
+    const k = AVATAR.perspective / (AVATAR.perspective + z);
+    return { x: this.cx + (AVATAR.mirror ? 1 : -1) * b[0] * this.S * k, y: this.cy - (y + 0.05) * this.S * k, k };
   }
 
   draw(f: Frame, now = performance.now()): void {
@@ -124,12 +157,12 @@ export class Avatar {
     ctx.stroke();
     ctx.restore();
 
-    this.history.push({ at: now, lm: f.right });
+    this.history.push({ at: now, lm: f.right, up: f.rightUp });
     const keep = Math.max(AVATAR.trailMs, ...AVATAR.ghosts.map((x) => x.agoMs)) + 100;
     while (this.history.length && now - this.history[0]!.at > keep) this.history.shift();
 
     // The other arm, dim, behind everything.
-    this.arm(ctx, f.left, true, C.dim);
+    this.arm(ctx, f.left, true, C.dim, f.leftUp);
     // Ghosts of the dominant arm: drawn whole off-screen, then laid down faint so overlaps don't double up.
     const gctx = this.ghostCanvas.getContext('2d');
     if (gctx) {
@@ -137,7 +170,7 @@ export class Avatar {
         const past = ghostAt(this.history, now, gh.agoMs);
         if (!past) continue;
         gctx.clearRect(0, 0, this.w, this.h);
-        this.arm(gctx, past.lm, false, C.ink);
+        this.arm(gctx, past.lm, false, C.ink, past.up);
         ctx.save();
         ctx.globalAlpha = gh.alpha;
         ctx.drawImage(this.ghostCanvas, 0, 0, this.w, this.h);
@@ -146,7 +179,7 @@ export class Avatar {
     }
     this.trail(now);
     this.ring(f);
-    this.arm(ctx, f.right, false, C.ink);
+    this.arm(ctx, f.right, false, C.ink, f.rightUp);
   }
 
   private trail(now: number): void {
@@ -191,43 +224,70 @@ export class Avatar {
     c.stroke();
   }
 
-  private arm(c: CanvasRenderingContext2D, lm: Landmarks, left: boolean, color: string): void {
-    const w = this.p(lm[0]!);
-    // The signer's right arm is on the viewer's left.
-    const end = { x: this.cx + (left ? 1 : -1) * AVATAR.armAnchorX * this.S, y: this.h + 30 };
-    const dx = end.x - w.x, dy = end.y - w.y, d = Math.hypot(dx, dy) || 1;
-    const ux = dx / d, uy = dy / d;
-    const half = (AVATAR.forearmWidth * this.S * w.k) / 2, far = half * AVATAR.forearmWiden;
-    c.fillStyle = color;
-    c.beginPath();
-    c.moveTo(w.x - uy * half, w.y + ux * half);
-    c.lineTo(end.x - uy * far, end.y + ux * far);
-    c.lineTo(end.x + uy * far, end.y - ux * far);
-    c.lineTo(w.x + uy * half, w.y - ux * half);
-    c.closePath();
-    c.fill();
-    c.beginPath();
-    c.arc(w.x, w.y, half, 0, Math.PI * 2);
-    c.fill();
-    this.hand(c, lm, color);
+  private arm(c: CanvasRenderingContext2D, lm: Landmarks, left: boolean, color: string, up: boolean): void {
+    const sh: V3 = left ? [-SHOULDER[0], SHOULDER[1], SHOULDER[2]] : SHOULDER;
+    const wrist = lm[0]!;
+    const el = elbow(sh, wrist, left);
+    this.limb(c, sh, el, AVATAR.upperArmWidth, color);
+    this.limb(c, el, wrist, AVATAR.forearmWidth, color);
+    if (up) this.hand(c, scaleHand(lm, AVATAR.handScale), color);
+    else this.fist(c, el, wrist, color);
   }
 
-  /** A flat hand: one color, palm filled, fingers as rounded strokes. */
+  /** A relaxed hand: a soft fist continuing the forearm, with a thumb nub. */
+  private fist(c: CanvasRenderingContext2D, el: V3, wrist: V3, color: string): void {
+    const e = this.p(el), w = this.p(wrist);
+    const ang = Math.atan2(w.y - e.y, w.x - e.x);
+    const F = AVATAR.fist, k = this.S * w.k;
+    c.save();
+    c.translate(w.x, w.y);
+    c.rotate(ang);
+    c.fillStyle = color;
+    c.beginPath();
+    c.roundRect(-F.length * 0.15 * k, (-F.width / 2) * k, F.length * k, F.width * k, F.radius * k);
+    c.fill();
+    c.beginPath();
+    c.roundRect(F.length * 0.1 * k, (-F.width / 2 - 0.035) * k, F.length * 0.55 * k, 0.06 * k, 0.03 * k);
+    c.fill();
+    c.restore();
+  }
+
+  /** A flat hand: one color, palm filled, fingers as rounded strokes with a thin gap around each. */
   private hand(c: CanvasRenderingContext2D, lm: Landmarks, color: string): void {
+    const k = AVATAR.handScale;
     c.fillStyle = color;
     c.strokeStyle = color;
     c.lineJoin = 'round';
-    c.lineWidth = AVATAR.fingerWidth * this.S * 0.9;
+    c.lineWidth = AVATAR.fingerWidth * k * this.S * 0.9;
     c.beginPath();
-    [0, 1, 5, 9, 13, 17].forEach((i, k) => {
+    [0, 1, 5, 9, 13, 17].forEach((i, n) => {
       const q = this.p(lm[i]!);
-      if (k === 0) c.moveTo(q.x, q.y); else c.lineTo(q.x, q.y);
+      if (n === 0) c.moveTo(q.x, q.y); else c.lineTo(q.x, q.y);
     });
     c.closePath();
     c.fill();
     c.stroke();
-    for (const [i, ids] of [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16], [17, 18, 19, 20]].entries()) {
-      for (let k = 0; k < ids.length - 1; k++) this.limb(c, lm[ids[k]!]!, lm[ids[k + 1]!]!, i === 0 ? AVATAR.thumbWidth : AVATAR.fingerWidth, color);
+    // Fingers, farthest first; each gets a background-coloured outline so neighbours stay apart.
+    const chains = [[1, 2, 3, 4], [5, 6, 7, 8], [9, 10, 11, 12], [13, 14, 15, 16], [17, 18, 19, 20]];
+    const order = chains.map((ids, i) => ({ ids, thumb: i === 0, z: ids.slice(1).reduce((s, j) => s + lm[j]![2], 0) }))
+      .sort((a, b) => b.z - a.z);
+    for (const f of order) {
+      const wdt = (f.thumb ? AVATAR.thumbWidth : AVATAR.fingerWidth) * k;
+      const path = f.ids.map((j) => this.p(lm[j]!));
+      const stroke = (style: string, extra: number) => {
+        c.strokeStyle = style;
+        c.lineWidth = wdt * this.S * path[0]!.k + extra;
+        c.lineCap = 'round';
+        c.beginPath();
+        path.forEach((q, n) => (n ? c.lineTo(q.x, q.y) : c.moveTo(q.x, q.y)));
+        c.stroke();
+      };
+      // the outline starts past the knuckle, so it parts the fingers without cutting into the palm
+      const knuckle = path.shift()!;
+      path.unshift({ x: (knuckle.x + path[0]!.x) / 2, y: (knuckle.y + path[0]!.y) / 2, k: knuckle.k });
+      stroke(this.colors.bg, AVATAR.fingerGap * 2);
+      path[0] = knuckle;
+      stroke(color, 0);
     }
   }
 }
