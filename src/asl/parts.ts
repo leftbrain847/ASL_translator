@@ -20,7 +20,8 @@ export const LOC_LABEL: Record<Loc, string> = {
   chin: 'chin', cheek: 'cheek', jaw: 'jaw', ear: 'ear', neck: 'neck', shoulder: 'shoulder', chest: 'chest',
   chestSide: 'side of chest', stomach: 'stomach', hip: 'hip', neutral: 'in front', neutralLow: 'in front, low',
   neutralHigh: 'in front, high', forward: 'out front', faceFront: 'before the face', headSide: 'beside the head',
-  side: 'to the side', basePalm: 'other palm', baseBack: 'back of other hand', baseTip: 'other fingertips',
+  side: 'to the side', locusA: 'place A (right)', locusB: 'place B (left)', locusC: 'place C (ahead)',
+  meNear: 'near me', youFar: 'toward you', basePalm: 'other palm', baseBack: 'back of other hand', baseTip: 'other fingertips',
   baseWrist: 'other wrist', baseHand: 'other hand',
 };
 

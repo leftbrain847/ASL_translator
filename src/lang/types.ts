@@ -1,5 +1,5 @@
 /** Language packs. The app ships English and ASL; another spoken or sign language is a new pack, not new code. */
-import type { Face, SignDef } from '../asl/sign';
+import type { Face, Mark, SignDef } from '../asl/sign';
 
 export interface Token {
   /** The words this token came from, as typed or heard. */
@@ -15,6 +15,8 @@ export interface Translation {
   face: Face;
   /** Indices into `signs` made with a headshake (negation). */
   negated: number[];
+  /** Facial grammar spans: questions, topics, conditionals, rhetorical questions. */
+  marks: Mark[];
   /** Words with no sign yet. */
   missing: string[];
 }
@@ -33,5 +35,7 @@ export interface SignLanguage {
   code: string;
   label: string;
   lexicon: readonly SignDef[];
+  /** The subset the camera recognizer knows. */
+  recognized: readonly SignDef[];
   bySign(gloss: string): SignDef | undefined;
 }

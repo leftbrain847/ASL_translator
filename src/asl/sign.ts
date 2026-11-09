@@ -51,4 +51,17 @@ export interface SignDef {
   base?: BaseSpec;
   /** A short description of how it is made, shown under the avatar. */
   how: string;
+  /** The camera recognizer also knows this sign (see lexicon.ts RECOGNIZED). */
+  recognize?: boolean;
+  /** Reduplication added by grammar: plural (repeated along a line), continuous (circling) or habitual. */
+  redup?: { kind: 'plural' | 'continuous' | 'habitual'; n: number };
+}
+
+/** A span of facial grammar over signs `from`..`to` (inclusive indices into the signs). */
+export interface Mark {
+  from: number;
+  to: number;
+  /** -1 furrowed, 1 raised. */
+  brows: number;
+  kind: 'yn' | 'wh' | 'rhet' | 'topic' | 'cond';
 }

@@ -30,7 +30,7 @@ An app built on app_builder. The platform rules live in `platform/SPEC.md`: read
 
 ## App-specific notes
 
-- **One lexicon, both directions.** `src/asl/lexicon.ts` drives the avatar and is the recognizer's template set. Never add a sign to one side only.
+- **One lexicon; the recognizer covers a marked subset.** `src/asl/lexicon.ts` drives the avatar for every sign (signing is meant to reach ~2,000 signs). Signs marked `recognize: true` are also the recognizer's template set (`RECOGNIZED`), and `npm test` proves each of those is recognized alone. Mark a sign `recognize: true` only when its recognizer tests pass. Grammar-built forms (`src/lang/grammar.ts`) are avatar-only.
 - **The recognizer runs on-device** (MediaPipe hands + pose). No video or landmarks leave the browser.
 - **MediaPipe is pinned to 0.10.35**: 1.x posts usage logs to Google with no off switch. Check `grep odml node_modules/@mediapipe/tasks-vision/vision_bundle.mjs` before any upgrade, and keep the URLs in `src/client/vision.ts` in step with the index repo's `site_deps.yml`.
 - **`web/asl-translator.html` is committed** (the public page the index publishes). Run `npm run build:web` and commit it with any change to `src/`.
