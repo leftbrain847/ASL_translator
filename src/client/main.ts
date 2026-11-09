@@ -8,6 +8,7 @@
 import config from '../../app.config.json';
 import { synthesize, toBody, type CamFrame } from '../asl/camera';
 import { frameAt, timeline, type Frame, type Timeline } from '../asl/motion';
+import { signParts } from '../asl/parts';
 import { Recognizer, type Recognized } from '../asl/recognize';
 import type { SignDef } from '../asl/sign';
 import { ASL, SPOKEN, type Translation } from '../lang';
@@ -24,7 +25,8 @@ const LIVE_CAMERA = import.meta.env.VITE_TARGET === 'web';
 export const UI = {
   phrases: ['Hello, nice to meet you', 'What is your name?', 'Where is the bathroom?', "I don't understand", 'Thank you for your help', 'I love you'],
   selfTest: [['HELLO', 'NICE', 'MEET', 'YOU'], ['YOUR', 'NAME', 'WHAT'], ['ME', 'LEARN', 'SIGN'], ['TOMORROW', 'ME', 'GO', 'SCHOOL'], ['ME', 'WANT', 'WATER']],
-  speeds: [{ label: 'Slow', value: 0.6 }, { label: 'Normal', value: 1 }],
+  /** The slow-motion toggle next to Replay. */
+  slow: { label: '0.5×', value: 0.5 },
   partialEveryMs: 600,
   publicUrl: (config as { publicUrl?: string }).publicUrl ?? '',
 };
@@ -65,31 +67,37 @@ function app(): HTMLElement {
   const main = h('main', { class: 'app' });
 
   // Header and mode switch.
-  const tabSpeak = h('button', { class: 'tab', role: 'tab', 'aria-selected': 'true', id: 'tab-speak' }, ['Speak → Sign']);
-  const tabRead = h('button', { class: 'tab', role: 'tab', 'aria-selected': 'false', id: 'tab-read' }, ['Sign → Speak']);
+  const tabSpeak = h('button', { class: 'tab', role: 'tab', 'aria-selected': 'true', id: 'tab-speak', title: `${lang.label} → ${signLang.label}` }, ['Speak']);
+  const tabRead = h('button', { class: 'tab', role: 'tab', 'aria-selected': 'false', id: 'tab-read', title: `${signLang.label} → ${lang.label}` }, ['Read']);
   const header = h('header', { class: 'top' }, [
-    h('div', { class: 'brand' }, [h('span', { class: 'mark', 'aria-hidden': 'true' }), h('div', {}, [h('h1', {}, ['ASL Translator']), h('p', { class: 'sub' }, [`${lang.label} ⇄ ${signLang.label} · prototype`])])]),
+    h('h1', { class: 'brand', title: 'ASL Translator · prototype' }, [signLang.label]),
     h('div', { class: 'tabs', role: 'tablist' }, [tabSpeak, tabRead]),
   ]);
 
   // ---------------- Speak → Sign
-  const stageCanvas = h('canvas', { class: 'avatar', 'aria-label': 'Signing avatar' });
-  const nowGloss = h('div', { class: 'now-gloss', 'aria-live': 'polite' });
-  const nowHow = h('div', { class: 'now-how' });
-  const stage = h('div', { class: 'stage' }, [stageCanvas, h('div', { class: 'stage-caption' }, [nowGloss, nowHow])]);
+  const progress = h('div', { class: 'progress', 'aria-hidden': 'true' });
+  const stageCanvas = h('canvas', { class: 'avatar', 'aria-label': 'Arms and hands signing' });
+  const stage = h('div', { class: 'stage' }, [stageCanvas]);
+  const nowWord = h('div', { class: 'now-word', 'aria-live': 'polite' });
+  const slowBtn = h('button', { class: 'textbtn', 'aria-pressed': 'false', title: 'Slow motion' }, [UI.slow.label]);
+  const replay = h('button', { class: 'textbtn' }, ['Replay']);
+  const wordRow = h('div', { class: 'word-row' }, [nowWord, h('div', { class: 'ctrls' }, [slowBtn, h('span', { class: 'dot-sep', 'aria-hidden': 'true' }, ['·']), replay])]);
+  const part = (k: string, dot = false) => {
+    const v = h('b');
+    return { v, el: h('span', { class: 'part' }, [...(dot ? [h('span', { class: 'where-dot', 'aria-hidden': 'true' })] : []), k + ' ', v]) };
+  };
+  const parts = { hand: part('Hand'), where: part('Where', true), move: part('Move'), palm: part('Palm') };
+  const partsRow = h('div', { class: 'parts', 'aria-label': 'How this sign is made' }, Object.values(parts).map((x) => x.el));
   const chips = h('div', { class: 'chips', 'aria-label': 'Signs in ASL order' });
   const note = h('p', { class: 'note' });
   const input = h('input', { class: 'text', type: 'text', placeholder: 'Type or speak a sentence', 'aria-label': 'Sentence to sign', enterkeyhint: 'go', autocomplete: 'off' });
   const mic = h('button', { class: 'round mic', 'aria-label': 'Speak', title: canListen() ? 'Speak' : 'Speech input isn’t available in this browser' }, [h('span', { class: 'ico ico-mic', 'aria-hidden': 'true' })]);
   const go = h('button', { class: 'round go', 'aria-label': 'Sign it' }, [h('span', { class: 'ico ico-play', 'aria-hidden': 'true' })]);
-  const speedBtns = UI.speeds.map((s) => h('button', { class: 'pill', 'aria-pressed': String(s.value === 1) }, [s.label]));
-  const replay = h('button', { class: 'pill' }, ['Replay']);
   const phraseRow = h('div', { class: 'phrases' }, UI.phrases.map((p) => h('button', { class: 'phrase' }, [p])));
   const speakPanel = h('section', { class: 'panel', id: 'panel-speak', role: 'tabpanel', 'aria-labelledby': 'tab-speak' }, [
-    stage, chips, note,
+    progress, stage, wordRow, partsRow, note,
     h('div', { class: 'composer' }, [input, mic, go]),
-    h('div', { class: 'row between' }, [h('div', { class: 'row' }, speedBtns), replay]),
-    phraseRow,
+    phraseRow, chips,
   ]);
 
   // ---------------- Sign → Speak
@@ -160,6 +168,24 @@ function app(): HTMLElement {
     chips.replaceChildren(...kids);
   };
 
+  /** One thin bar per sign; filled while it plays. */
+  const bars = (n: number) => progress.replaceChildren(...Array.from({ length: n }, () => h('i', {}, [h('span')])));
+  const showSign = (s: SignDef | undefined) => {
+    nowWord.textContent = s ? s.en[0]! : '';
+    const pp = s ? signParts(s) : null;
+    for (const [k, x] of Object.entries(parts)) x.v.textContent = pp ? pp[k as keyof typeof pp] : '';
+    partsRow.classList.toggle('empty', !pp);
+    avatar.mark(s?.dom.loc ?? null);
+  };
+  const fillBars = () => {
+    const tl = player.tl;
+    Array.from(progress.children).forEach((b, i) => {
+      const ts = tl?.signs[i];
+      const k = !tl ? 1 : !ts ? 0 : Math.max(0, Math.min(1, (player.t - ts.start) / (ts.end - ts.start)));
+      (b.firstElementChild as HTMLElement).style.transform = `scaleX(${k})`;
+    });
+  };
+
   const play = (text: string) => {
     const t = lang.toSigns(text, signLang);
     current = t;
@@ -174,10 +200,10 @@ function app(): HTMLElement {
     player.tl = t.signs.length ? timeline(t.signs, t.face, t.negated) : null;
     player.t = 0;
     player.lastActive = -2;
+    bars(t.signs.length);
     player.onSign = (i) => {
       const s = i >= 0 ? t.signs[i] : undefined;
-      nowGloss.textContent = s?.gloss ?? '';
-      nowHow.textContent = s?.how ?? '';
+      if (s) showSign(s); else avatar.mark(null);
       showChips(t, i);
     };
   };
@@ -190,17 +216,20 @@ function app(): HTMLElement {
     player.tl = timeline([s]);
     player.t = 0;
     player.lastActive = -2;
-    player.onSign = (i) => { nowGloss.textContent = i >= 0 ? s.gloss : ''; nowHow.textContent = i >= 0 ? s.how : ''; showChips(t, i); };
+    bars(1);
+    showSign(s);
+    player.onSign = (i) => { if (i >= 0) showSign(s); else avatar.mark(null); showChips(t, i); };
   };
 
   on(go, 'click', () => { if (input.value.trim()) play(input.value); });
   on(input, 'keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter' && input.value.trim()) play(input.value); });
   for (const b of Array.from(phraseRow.children)) on(b as HTMLElement, 'click', () => { input.value = b.textContent ?? ''; play(input.value); });
   on(replay, 'click', () => { if (current?.signs.length) { player.tl = timeline(current.signs, current.face, current.negated); player.t = 0; player.lastActive = -2; } });
-  speedBtns.forEach((b, i) => on(b, 'click', () => {
-    player.speed = UI.speeds[i]!.value;
-    speedBtns.forEach((x, k) => x.setAttribute('aria-pressed', String(k === i)));
-  }));
+  on(slowBtn, 'click', () => {
+    const slow = player.speed === 1;
+    player.speed = slow ? UI.slow.value : 1;
+    slowBtn.setAttribute('aria-pressed', String(slow));
+  });
   for (const b of Array.from(dict.children)) on(b as HTMLElement, 'click', () => {
     const s = signLang.bySign(b.textContent ?? '');
     if (s) { setTab(false); playSign(s); window.scrollTo({ top: 0, behavior: 'smooth' }); }
@@ -352,10 +381,10 @@ function app(): HTMLElement {
   const loop = (now: number) => {
     const dt = Math.min(0.05, (now - last) / 1000);
     last = now;
-    if (!speakPanel.hidden) avatar.draw(step(player, dt));
+    if (!speakPanel.hidden) { avatar.draw(step(player, dt), now); fillBars(); }
     if (!readPanel.hidden) {
       const f = step(testPlayer, dt);
-      testAvatar.draw(f);
+      testAvatar.draw(f, now);
       if (testRec && testPlayer.tl) {
         const cam = synthesize([{ t: testPlayer.t, f }])[0]!;
         const b = toBody(cam);
