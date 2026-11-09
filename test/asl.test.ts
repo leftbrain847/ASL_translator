@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { dirVec } from '../src/asl/body';
 import { noise, toBody, toCamera } from '../src/asl/camera';
 import { classifyShape, HANDSHAPES, localHand, placeHand, shapeFeatures, SHAPE_NAMES } from '../src/asl/hand';
-import { LEXICON, signByGloss } from '../src/asl/lexicon';
+import { LEXICON, RECOGNIZED, signByGloss } from '../src/asl/lexicon';
 import { evaluate, frameAt, timeline } from '../src/asl/motion';
 import { Recognizer } from '../src/asl/recognize';
 import { dot, norm, orthoTo } from '../src/asl/vec';
@@ -71,7 +71,7 @@ describe('English → ASL gloss', () => {
   it('uses set phrases and lemmas, and reports words with no sign', () => {
     expect(gl('Nice to meet you')).toBe('NICE MEET YOU');
     expect(gl('I love you')).toBe('I-LOVE-YOU');
-    expect(gl('my friends')).toBe('MY FRIEND');
+    expect(gl('my friends')).toBe('MY FRIEND IX-A');   // a person is placed in space (grammar.test.ts)
     expect(en.toSigns('My name is Jordan', ASL).missing).toEqual(['jordan']);
   });
 });
@@ -93,8 +93,8 @@ describe('ASL gloss → English', () => {
 describe('recognizer (synthetic camera)', () => {
   it('recognizes every sign on its own', () => {
     const missed: string[] = [];
-    for (const s of LEXICON) {
-      const r = roundTrip([s], LEXICON, { jitter: 0.01 });
+    for (const s of RECOGNIZED) {
+      const r = roundTrip([s], RECOGNIZED, { jitter: 0.01 });
       if (r.length !== 1 || r[0]!.best?.gloss !== s.gloss) missed.push(`${s.gloss}→${r.map((x) => x.best?.gloss ?? '?').join(',')}`);
     }
     expect(missed).toEqual([]);
@@ -102,19 +102,19 @@ describe('recognizer (synthetic camera)', () => {
 
   it('reads continuous sentences with no pauses between signs', () => {
     for (const g of [['YOUR', 'NAME', 'WHAT'], ['ME', 'LEARN', 'SIGN'], ['TOMORROW', 'ME', 'GO', 'SCHOOL'], ['HELLO', 'NICE', 'MEET', 'YOU'], ['BATHROOM', 'WHERE']]) {
-      const got = roundTrip(g.map((x) => signByGloss(x)!), LEXICON, { jitter: 0.01, gap: 0 }).map((x) => x.best?.gloss ?? '?');
+      const got = roundTrip(g.map((x) => signByGloss(x)!), RECOGNIZED, { jitter: 0.01, gap: 0 }).map((x) => x.best?.gloss ?? '?');
       expect(got).toEqual(g);
     }
   }, 60000);
 
   it('copes with slower signing and a differently sized signer', () => {
     let ok = 0;
-    for (const s of LEXICON) {
-      const a = roundTrip([s], LEXICON, { jitter: 0.01, tempo: 0.7 });
-      const b = roundTrip([s], LEXICON, { jitter: 0.01, space: 0.9 });
+    for (const s of RECOGNIZED) {
+      const a = roundTrip([s], RECOGNIZED, { jitter: 0.01, tempo: 0.7 });
+      const b = roundTrip([s], RECOGNIZED, { jitter: 0.01, space: 0.9 });
       ok += Number(a.length === 1 && a[0]!.best?.gloss === s.gloss) + Number(b.length === 1 && b[0]!.best?.gloss === s.gloss);
     }
-    expect(ok / (2 * LEXICON.length)).toBeGreaterThan(0.95);
+    expect(ok / (2 * RECOGNIZED.length)).toBeGreaterThan(0.95);
   }, 120000);
 
   it('says little when the hands just move around', () => {
@@ -123,7 +123,7 @@ describe('recognizer (synthetic camera)', () => {
     for (let k = 0; k < 20; k++) {
       const shape = localHand(HANDSHAPES[SHAPE_NAMES[Math.floor(((r() + 1) / 2) * SHAPE_NAMES.length) % SHAPE_NAMES.length]!]);
       const pts = Array.from({ length: 5 }, () => [r() * 0.5, r() * 0.6 - 0.1, -0.4] as const);
-      const rec = new Recognizer(LEXICON);
+      const rec = new Recognizer(RECOGNIZED);
       for (let t = 0; t < 4; t += 1 / 30) {
         const i = Math.min(3, Math.floor(t)), f = t - i, a = pts[i]!, b = pts[i + 1]!;
         const n = norm([0.3, 0.2, -1]);
@@ -138,7 +138,7 @@ describe('recognizer (synthetic camera)', () => {
   it('handles a left-handed signer when told to', () => {
     const s = signByGloss('THANK-YOU')!;
     const tl = timeline([s]);
-    const rec = new Recognizer(LEXICON);
+    const rec = new Recognizer(RECOGNIZED);
     const out: string[] = [];
     for (let t = 0; t <= tl.total + 0.3; t += 1 / 30) {
       const f = frameAt(tl, t);

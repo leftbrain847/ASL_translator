@@ -47,6 +47,13 @@ export const LOCATIONS = {
   faceFront: [0.1, 0.8, -0.55],
   headSide: [0.42, 0.92, -0.25],
   side: [0.62, -0.3, -0.42],
+  // Places in signing space for people and things talked about (loci), and the signer's and addressee's
+  // ends of a directional verb.
+  locusA: [0.55, -0.3, -0.6],
+  locusB: [-0.35, -0.3, -0.6],
+  locusC: [0.2, -0.3, -0.85],
+  meNear: [0.1, -0.32, -0.3],
+  youFar: [0.1, -0.3, -0.85],
   // Places on the base (non-dominant) hand; resolved against where the base hand actually is.
   basePalm: [0, 0, 0],
   baseBack: [0, 0, 0],

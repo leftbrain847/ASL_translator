@@ -138,7 +138,7 @@ function app(): HTMLElement {
   const footer = h('footer', { class: 'foot' }, [
     dictBtn, dict,
     h('p', {}, ['Prototype. Signs are written from dictionary descriptions and have not yet been reviewed by a Deaf signer. ' +
-      'Recognition has been tested on synthetic camera data only. Grammar covers simple sentences; names and words without a sign are skipped, not fingerspelled.']),
+      'Recognition has been tested on synthetic camera data only. Grammar follows common textbook rules (topics, signing space, directional verbs), also unreviewed; names and words without a sign are skipped, not fingerspelled.']),
   ]);
 
   for (const n of [header, speakPanel, readPanel, footer]) main.appendChild(n);
@@ -194,10 +194,13 @@ function app(): HTMLElement {
     if (t.face.brows > 0) bits.push('Raised brows: a yes/no question.');
     if (t.face.brows < 0) bits.push('Furrowed brows: a WH-question.');
     if (t.face.headshake) bits.push('Head shakes with the negation.');
+    if (t.marks.some((m) => m.kind === 'topic')) bits.push('Raised brows: the topic comes first.');
+    if (t.marks.some((m) => m.kind === 'cond')) bits.push('Raised brows: the condition comes first.');
+    if (t.marks.some((m) => m.kind === 'rhet')) bits.push('Raised brows: a rhetorical question, then the answer.');
     if (t.missing.length) bits.push(`No sign yet for: ${t.missing.join(', ')}.`);
     if (!t.signs.length) bits.unshift('None of those words are in the vocabulary yet.');
     note.textContent = bits.join(' ');
-    player.tl = t.signs.length ? timeline(t.signs, t.face, t.negated) : null;
+    player.tl = t.signs.length ? timeline(t.signs, t.face, t.negated, 0, t.marks) : null;
     player.t = 0;
     player.lastActive = -2;
     bars(t.signs.length);
@@ -209,7 +212,7 @@ function app(): HTMLElement {
   };
 
   const playSign = (s: SignDef) => {
-    const t: Translation = { tokens: [{ words: s.en[0]!, gloss: s.gloss }], signs: [s], face: { brows: 0, headshake: false }, negated: [], missing: [] };
+    const t: Translation = { tokens: [{ words: s.en[0]!, gloss: s.gloss }], signs: [s], face: { brows: 0, headshake: false }, negated: [], marks: [], missing: [] };
     current = t;
     showChips(t, -1);
     note.textContent = s.en.join(', ');
@@ -224,7 +227,7 @@ function app(): HTMLElement {
   on(go, 'click', () => { if (input.value.trim()) play(input.value); });
   on(input, 'keydown', (e) => { if ((e as KeyboardEvent).key === 'Enter' && input.value.trim()) play(input.value); });
   for (const b of Array.from(phraseRow.children)) on(b as HTMLElement, 'click', () => { input.value = b.textContent ?? ''; play(input.value); });
-  on(replay, 'click', () => { if (current?.signs.length) { player.tl = timeline(current.signs, current.face, current.negated); player.t = 0; player.lastActive = -2; } });
+  on(replay, 'click', () => { if (current?.signs.length) { player.tl = timeline(current.signs, current.face, current.negated, 0, current.marks); player.t = 0; player.lastActive = -2; } });
   on(slowBtn, 'click', () => {
     const slow = player.speed === 1;
     player.speed = slow ? UI.slow.value : 1;
@@ -283,7 +286,7 @@ function app(): HTMLElement {
   on(testBtn, 'click', () => {
     const glosses = UI.selfTest[testRun++ % UI.selfTest.length]!;
     const signs = glosses.map((g) => signLang.bySign(g)).filter((s): s is SignDef => !!s);
-    testRec = new Recognizer(signLang.lexicon);
+    testRec = new Recognizer(signLang.recognized);
     testHeard = [];
     testPlayer.tl = timeline(signs);
     testPlayer.t = 0;
@@ -335,7 +338,7 @@ function app(): HTMLElement {
       await video.play().catch(() => undefined);
       const vision = await import('./vision');
       tracker = await vision.createTracker((s) => { camStatus.textContent = s; });
-      camRec = new Recognizer(signLang.lexicon);
+      camRec = new Recognizer(signLang.recognized);
       camBox.classList.add('live');
       stopBtn.hidden = false;
       camStatus.textContent = 'Show your head, shoulders and hands. Pause or lower your hands to finish a phrase.';

@@ -4,7 +4,7 @@
  */
 import { BASE_LOCS, dirFor, locFor, REST } from './body';
 import { blendLocal, contactLocal, defaultContact, HANDSHAPES, localHand, placeHand, wristFor, type Handshape, type Landmarks, type Orient, type ShapeName } from './hand';
-import type { BaseSpec, Face, HandSpec, SignDef } from './sign';
+import type { BaseSpec, Face, HandSpec, Mark, SignDef } from './sign';
 import { add, cross, lerp, norm, orthoTo, rotate, scale, slerp, smooth, sub, type V3 } from './vec';
 
 /** Timing and motion sizes, in seconds and body units. */
@@ -23,6 +23,14 @@ export const MOTION = {
   nodDeg: 28,
   wiggleDeg: 22,
   touchGap: 0.025,
+  /** Reduplication: share of each repetition spent moving back to the start, and the offsets between repetitions. */
+  redupReturn: 0.3,
+  redupStep: 0.12,
+  redupCircle: 0.06,
+  redupTime: 0.75,
+  /** Facial grammar starts a little before its first sign and lets go a little after its last. */
+  markLead: 0.12,
+  markTail: 0.1,
 };
 
 export interface HandState { local: Landmarks; orient: Orient; wrist: V3 }
@@ -70,8 +78,36 @@ function basePoint(loc: HandSpec['loc'], base: HandState): V3 {
 
 const tri = (x: number): number => 1 - Math.abs(1 - 2 * (x - Math.floor(x)));   // 0→1→0 per unit
 
-/** Pose of both hands at phase u ∈ [0, 1] of a sign. A missing hand stays at rest. */
+/**
+ * Pose of both hands at phase u ∈ [0, 1] of a sign. A missing hand stays at rest. A reduplicated sign makes
+ * its movement n times, returning to the start between repetitions, each repetition offset by its kind: along
+ * a line (plural), around a small circle (continuous) or a little forward (habitual).
+ */
 export function evaluate(sign: SignDef, u: number): { right: HandState; left: HandState | null } {
+  if (!sign.redup || sign.redup.n < 2) return evaluateOnce(sign, u);
+  const { n, kind } = sign.redup;
+  const plain: SignDef = { ...sign, redup: undefined };
+  const x = Math.min(n - 1e-9, Math.max(0, u) * n);
+  const i = Math.floor(x), ph = x - i;
+  const offset = (j: number): V3 => {
+    if (kind === 'plural') return [MOTION.redupStep * (j - (n - 1) / 2), 0, 0];
+    if (kind === 'continuous') { const a = (2 * Math.PI * j) / n; return [MOTION.redupCircle * Math.sin(a), MOTION.redupCircle * (Math.cos(a) - 1), 0]; }
+    return [0, 0, -0.04 * j];
+  };
+  const shift = (st: { right: HandState; left: HandState | null }, d: V3, both: boolean) => ({
+    right: { ...st.right, wrist: add(st.right.wrist, d) },
+    left: st.left && both ? { ...st.left, wrist: add(st.left.wrist, d) } : st.left,
+  });
+  const both = sign.two === 'mirror' || sign.two === 'alternate';
+  const r = MOTION.redupReturn;
+  if (ph <= 1 - r || i === n - 1) return shift(evaluateOnce(plain, Math.min(1, ph / (1 - r))), offset(i), both);
+  // the return stroke: from this repetition's end to the next one's start
+  const a = shift(evaluateOnce(plain, 1), offset(i), both), b = shift(evaluateOnce(plain, 0), offset(i + 1), both);
+  const k = (ph - (1 - r)) / r;
+  return { right: blendState(a.right, b.right, k), left: a.left && b.left ? blendState(a.left, b.left, k) : a.left };
+}
+
+function evaluateOnce(sign: SignDef, u: number): { right: HandState; left: HandState | null } {
   const base = sign.two === 'base' ? baseState({ ...DEFAULT_BASE, ...sign.base }) : null;
   const right = evalHand(sign, u, false, base);
   let left: HandState | null = null;
@@ -171,6 +207,7 @@ function evalHand(sign: SignDef, u: number, left: boolean, base: HandState | nul
 }
 
 export function signDuration(sign: SignDef): number {
+  if (sign.redup && sign.redup.n > 1) return signDuration({ ...sign, redup: undefined }) * (1 + (sign.redup.n - 1) * MOTION.redupTime);
   const d = sign.dom;
   if ((d.path ?? (d.to ? 'line' : 'hold')) === 'hold') return MOTION.hold;
   return Math.min(MOTION.maxSign, MOTION.signBase + MOTION.perRep * (d.reps ?? 1));
@@ -180,7 +217,9 @@ export function signDuration(sign: SignDef): number {
 
 /** `hold` is when the end pose is let go: equal to `end` unless the timeline pauses after each sign. */
 export interface TimedSign { sign: SignDef; start: number; end: number; hold: number; index: number }
-export interface Timeline { signs: TimedSign[]; total: number; face: Face; negateFrom: number; negateTo: number }
+/** A facial-grammar span placed in time. */
+export interface TimedMark { from: number; to: number; brows: number }
+export interface Timeline { signs: TimedSign[]; total: number; face: Face; negateFrom: number; negateTo: number; marks: TimedMark[] }
 
 export interface Frame {
   right: Landmarks;
@@ -193,7 +232,7 @@ export interface Frame {
   leftUp: boolean;
 }
 
-export function timeline(signs: SignDef[], face: Face = { brows: 0, headshake: false }, negated: number[] = [], gap = 0): Timeline {
+export function timeline(signs: SignDef[], face: Face = { brows: 0, headshake: false }, negated: number[] = [], gap = 0, marks: readonly Mark[] = []): Timeline {
   let t = MOTION.fromRest;
   const out: TimedSign[] = [];
   signs.forEach((sign, index) => {
@@ -203,8 +242,10 @@ export function timeline(signs: SignDef[], face: Face = { brows: 0, headshake: f
     t += dur + gap;
   });
   const neg = negated.map((i) => out[i]).filter((x): x is TimedSign => !!x);
+  const timed = marks.filter((m) => out[m.from] && out[m.to])
+    .map((m) => ({ from: out[m.from]!.start - MOTION.markLead, to: out[m.to]!.end + MOTION.markTail, brows: m.brows }));
   return {
-    signs: out, total: t + MOTION.toRest, face,
+    signs: out, total: t + MOTION.toRest, face, marks: timed,
     negateFrom: neg.length ? neg[0]!.start - 0.15 : -1, negateTo: neg.length ? neg[neg.length - 1]!.end + 0.1 : -1,
   };
 }
@@ -246,11 +287,14 @@ export function frameAt(tl: Timeline, time: number): Frame {
   const s = stateAt(tl, time);
   const shaking = tl.negateFrom >= 0 && time >= tl.negateFrom && time <= tl.negateTo;
   const signing = time > 0.15 && time < tl.total - 0.2;
+  // Spans set the brows while they last; with no spans, the sentence's own brows hold throughout.
+  const mark = tl.marks.find((m) => time >= m.from && time <= m.to);
+  const brows = tl.marks.length ? (mark ? mark.brows : 0) : signing ? tl.face.brows : 0;
   return {
     right: placeHand(s.right.local, s.right.orient, s.right.wrist, false),
     left: placeHand(s.left.local, s.left.orient, s.left.wrist, true),
     active: s.active,
-    face: { brows: signing ? tl.face.brows : 0, yaw: shaking ? 0.22 * Math.sin(time * 2 * Math.PI * 2.6) : 0, tilt: signing && tl.face.brows > 0 ? 0.06 : 0 },
+    face: { brows, yaw: shaking ? 0.22 * Math.sin(time * 2 * Math.PI * 2.6) : 0, tilt: brows > 0 ? 0.06 : 0 },
     rightUp: s.rightUp,
     leftUp: s.leftUp,
   };
