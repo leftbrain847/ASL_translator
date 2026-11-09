@@ -2,7 +2,7 @@
 import type { Dir, Loc } from './body';
 import type { Contact, ShapeName } from './hand';
 
-export type Path = 'hold' | 'line' | 'arc' | 'circle' | 'tap' | 'shake' | 'nod' | 'wiggle' | 'wave' | 'brush';
+export type Path = 'hold' | 'line' | 'arc' | 'circle' | 'tap' | 'shake' | 'nod' | 'wiggle' | 'wave' | 'brush' | 'zigzag';
 
 export interface HandSpec {
   shape: ShapeName;
@@ -53,6 +53,10 @@ export interface SignDef {
   how: string;
   /** The camera recognizer also knows this sign (see lexicon.ts RECOGNIZED). */
   recognize?: boolean;
+  /** A fingerspelled letter: the word it belongs to and its position (fingerspell.ts). */
+  spell?: { word: string; i: number };
+  /** Seconds this sign takes, overriding the usual timing (letters are quick). */
+  dur?: number;
   /** Reduplication added by grammar: plural (repeated along a line), continuous (circling) or habitual. */
   redup?: { kind: 'plural' | 'continuous' | 'habitual'; n: number };
 }

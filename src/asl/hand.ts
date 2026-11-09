@@ -14,7 +14,7 @@ const D = Math.PI / 180;
 
 /** [MCP flex, PIP flex, spread] in degrees for index, middle, ring, pinky. DIP follows PIP (×0.7). */
 export type Finger = readonly [number, number, number];
-export type ThumbMode = 'out' | 'side' | 'up' | 'across' | 'over' | 'tuck' | 'c' | 'touchIndex' | 'touchMiddle' | 'touchRing' | 'touchPinky' | 'between';
+export type ThumbMode = 'out' | 'side' | 'up' | 'across' | 'over' | 'tuck' | 'c' | 'touchIndex' | 'touchMiddle' | 'touchRing' | 'touchPinky' | 'between' | 'underMiddle' | 'underRing';
 
 export interface Handshape {
   fingers: readonly [Finger, Finger, Finger, Finger];
@@ -56,6 +56,15 @@ export const HANDSHAPES = {
   H: { fingers: [sp(E, 1), sp(E, -1), F, F], thumb: 'over' },   // same fingers as U; held sideways
   N3: { fingers: [sp(E, 2), sp(E, -2), F, F], thumb: 'out' },   // index + middle + thumb open (NO, start)
   NC: { fingers: [[40, 40, 0], [40, 40, 0], F, F], thumb: 'touchMiddle' }, // ... snapped closed (NO, end)
+  // Manual alphabet shapes not covered above (fingerspell.ts maps every letter to a shape).
+  D: { fingers: [E, [45, 75, 0], [50, 70, 0], [52, 68, 0]], thumb: 'touchMiddle' },   // index up, others ring the thumb
+  E: { fingers: [[70, 110, 0], [70, 110, 0], [70, 110, 0], [70, 110, 0]], thumb: 'tuck' }, // fingertips bent down to the tucked thumb
+  G: { fingers: [E, F, F, F], thumb: 'up' },                     // index and thumb parallel, held sideways
+  K: { fingers: [sp(E, 10), [35, 0, -8], F, F], thumb: 'between' }, // index up, middle angled out, thumb between
+  M: { fingers: [[85, 95, 0], [85, 95, 0], [85, 95, 0], F], thumb: 'underRing' },    // thumb under three fingers
+  N: { fingers: [[85, 95, 0], [85, 95, 0], F, F], thumb: 'underMiddle' },            // thumb under two fingers
+  R: { fingers: [sp(E, -8), sp(E, 10), F, F], thumb: 'over' },    // index and middle crossed
+  '7': { fingers: [sp(E, 12), sp(E, 2), [45, 75, 0], sp(E, -14)], thumb: 'touchRing' }, // number 7: thumb to ring
 } as const satisfies Record<string, Handshape>;
 
 export type ShapeName = keyof typeof HANDSHAPES;
@@ -98,6 +107,8 @@ function thumb(mode: ThumbMode, fingers: V3[][]): V3[] {
     case 'across': return [CMC, [0.15, 0.2, 0.08], [0.06, 0.27, 0.12], [-0.04, 0.3, 0.13]];
     case 'over': return [CMC, [0.16, 0.22, 0.1], [0.08, 0.3, 0.17], [-0.02, 0.33, 0.19]];
     case 'between': return [CMC, [0.16, 0.24, 0.1], [0.12, 0.34, 0.15], [0.05, 0.42, 0.14]];
+    case 'underMiddle': return [CMC, [0.15, 0.23, 0.11], [0.06, 0.32, 0.15], [-0.05, 0.4, 0.13]];
+    case 'underRing': return [CMC, [0.14, 0.22, 0.12], [0.02, 0.31, 0.16], [-0.12, 0.38, 0.13]];
     case 'c': return [CMC, [0.21, 0.2, 0.12], [0.23, 0.29, 0.21], [0.19, 0.36, 0.28]];
     case 'touchIndex': return toward(add(tipOf(0), [0.02, -0.01, 0.02]));
     case 'touchMiddle': return toward(add(tipOf(1), [0.02, -0.01, 0.02]));

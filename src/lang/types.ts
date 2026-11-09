@@ -17,8 +17,10 @@ export interface Translation {
   negated: number[];
   /** Facial grammar spans: questions, topics, conditionals, rhetorical questions. */
   marks: Mark[];
-  /** Words with no sign yet. */
+  /** Words with no sign and nothing to spell. */
   missing: string[];
+  /** Words with no sign, fingerspelled instead. */
+  spelled: string[];
 }
 
 /** A spoken/written language: turns its text into a sign language's order, and recognized signs back into text. */

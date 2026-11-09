@@ -49,7 +49,11 @@ describe('hand model', () => {
 });
 
 describe('English → ASL gloss', () => {
-  it('drops articles and "be", and keeps known signs', () => expect(gl('I am a student and the dog is happy')).toBe('ME DOG HAPPY'));
+  it('drops articles and "be", and keeps known signs', () => {
+    const t = en.toSigns('I am a student and the dog is happy', ASL);
+    expect(t.signs.filter((s) => !s.spell).map((s) => s.gloss).join(' ')).toBe('ME DOG HAPPY');
+    expect(t.spelled).toEqual(['student']);   // no sign yet: fingerspelled
+  });
   it('does not sign "it" as a person', () => expect(gl('Is it hot?')).toBe('HOT'));
   it('moves question words to the end and furrows the brows', () => {
     expect(gl('What is your name?')).toBe('YOUR NAME WHAT');
@@ -72,7 +76,7 @@ describe('English → ASL gloss', () => {
     expect(gl('Nice to meet you')).toBe('NICE MEET YOU');
     expect(gl('I love you')).toBe('I-LOVE-YOU');
     expect(gl('my friends')).toBe('MY FRIEND IX-A');   // a person is placed in space (grammar.test.ts)
-    expect(en.toSigns('My name is Jordan', ASL).missing).toEqual(['jordan']);
+    expect(en.toSigns('My name is Jordan', ASL).spelled).toEqual(['jordan']);   // fingerspelled (fingerspell.test.ts)
   });
 });
 

@@ -11,7 +11,7 @@ export const SHAPE_LABEL: Record<ShapeName, string> = {
   B: 'flat B', OB: 'open B', '5': 'open 5', '4': '4', A: 'A fist', S: 'S fist', T: 'T', '10': 'thumb up',
   '1': 'index', L: 'L', X: 'hooked X', V: 'V', U: 'U', '3': '3', W: 'W', Y: 'Y', I: 'pinky I', ILY: 'I-love-you',
   C: 'C', O: 'O', flatO: 'flat O', bentB: 'bent B', claw: 'claw', F: 'F', open8: 'open 8', '8': '8', H: 'H',
-  N3: 'open 3', NC: 'snapped 3',
+  N3: 'open 3', NC: 'snapped 3', D: 'D', E: 'E', G: 'G', K: 'K', M: 'M', N: 'N', R: 'R', '7': '7',
 };
 
 /** Places as a learner would say them. */
@@ -20,7 +20,7 @@ export const LOC_LABEL: Record<Loc, string> = {
   chin: 'chin', cheek: 'cheek', jaw: 'jaw', ear: 'ear', neck: 'neck', shoulder: 'shoulder', chest: 'chest',
   chestSide: 'side of chest', stomach: 'stomach', hip: 'hip', neutral: 'in front', neutralLow: 'in front, low',
   neutralHigh: 'in front, high', forward: 'out front', faceFront: 'before the face', headSide: 'beside the head',
-  side: 'to the side', locusA: 'place A (right)', locusB: 'place B (left)', locusC: 'place C (ahead)',
+  side: 'to the side', spell: 'by the shoulder', locusA: 'place A (right)', locusB: 'place B (left)', locusC: 'place C (ahead)',
   meNear: 'near me', youFar: 'toward you', basePalm: 'other palm', baseBack: 'back of other hand', baseTip: 'other fingertips',
   baseWrist: 'other wrist', baseHand: 'other hand',
 };
@@ -29,7 +29,7 @@ const MOVE_DIR: Record<BaseDir, string> = { up: 'up', down: 'down', fwd: 'forwar
 const PALM_DIR: Record<BaseDir, string> = { up: 'up', down: 'down', fwd: 'forward', back: 'to body', out: 'outward', in: 'inward' };
 /** Paths that are a movement in their own right (a line or arc is described by where it goes instead). */
 const PATH_LABEL: Partial<Record<Path, string>> = {
-  circle: 'circle', tap: 'tap', shake: 'shake', nod: 'nod', wiggle: 'wiggle', wave: 'wave', brush: 'brush',
+  zigzag: 'draw Z', circle: 'circle', tap: 'tap', shake: 'shake', nod: 'nod', wiggle: 'wiggle', wave: 'wave', brush: 'brush',
 };
 
 const dirWords = (d: Dir, words: Record<BaseDir, string>): string => d.split('+').map((p) => words[p as BaseDir]).join(' & ');

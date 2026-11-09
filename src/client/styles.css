@@ -70,6 +70,9 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .avatar { display: block; width: 100%; height: 100%; }
 .word-row { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; margin: 16px 0 12px; }
 .now-word { font-size: 32px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.1; min-height: 1.1em; text-transform: lowercase; }
+/* a fingerspelled word: letters spaced out, the one being made in full ink */
+.now-word .lt { color: var(--muted); letter-spacing: 0.08em; transition: color 120ms; }
+.now-word .lt.on { color: var(--fg); }
 .ctrls { display: flex; align-items: baseline; gap: 6px; color: var(--muted); flex: none; }
 .textbtn { border: 0; background: none; padding: 10px 2px; min-height: 44px; color: var(--muted); font-size: 14px; }
 .textbtn[aria-pressed='true'] { color: var(--accent); }
@@ -90,6 +93,7 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 .chip.neg { box-shadow: inset 0 -2px 0 var(--warn); }
 .chip.missing { color: var(--muted); border-style: dashed; font-weight: 450; letter-spacing: 0; }
 .chip.soft { opacity: 0.6; }
+.chip.spelled { letter-spacing: 0.04em; }
 .note { margin: -4px 0 0; color: var(--muted); font-size: 14px; min-height: 1.4em; }
 
 .composer { display: flex; gap: 10px; align-items: center; }
