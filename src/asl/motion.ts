@@ -14,6 +14,8 @@ export const MOTION = {
   maxSign: 1.5,
   hold: 0.7,
   transition: 0.26,
+  /** Between two fingerspelled letters of one word. */
+  letterTransition: 0.08,
   fromRest: 0.4,
   toRest: 0.5,
   tapSize: 0.07,
@@ -187,6 +189,15 @@ function evalHand(sign: SignDef, u: number, left: boolean, base: HandState | nul
       o = { f: rotate(o.f, t, a), n: rotate(o.n, t, a) };
       break;
     }
+    case 'zigzag': {
+      // Z as the viewer reads it: across the top, diagonal down, across the bottom (out = dominant side)
+      const sz = d.size ?? 0.06;
+      const ox = dirFor('out', left), oy = dirFor('up', left);
+      const pts: V3[] = [[-1, 1], [1, 1], [-1, -1], [1, -1]].map(([a, b]) => add(P0, add(scale(ox, a! * sz), scale(oy, b! * sz))));
+      const x = Math.min(2.999, Math.max(0, u) * 3), seg = Math.floor(x);
+      p = lerp(pts[seg]!, pts[seg + 1]!, smooth(x - seg));
+      break;
+    }
     case 'wiggle':
     case 'wave': {
       const hs = HANDSHAPES[d.shape] as Handshape;
@@ -207,6 +218,7 @@ function evalHand(sign: SignDef, u: number, left: boolean, base: HandState | nul
 }
 
 export function signDuration(sign: SignDef): number {
+  if (sign.dur && !sign.redup) return sign.dur;
   if (sign.redup && sign.redup.n > 1) return signDuration({ ...sign, redup: undefined }) * (1 + (sign.redup.n - 1) * MOTION.redupTime);
   const d = sign.dom;
   if ((d.path ?? (d.to ? 'line' : 'hold')) === 'hold') return MOTION.hold;
@@ -226,7 +238,8 @@ export interface Frame {
   left: Landmarks;
   /** Index of the sign being made (or the next one, during a transition); -1 at rest. */
   active: number;
-  face: { brows: number; yaw: number; tilt: number };
+  /** shake: a headshake is on (yaw passes through zero while it lasts). */
+  face: { brows: number; yaw: number; tilt: number; shake: boolean };
   /** Whether each hand is up in signing space (for the recognizer's self-test). */
   rightUp: boolean;
   leftUp: boolean;
@@ -236,7 +249,8 @@ export function timeline(signs: SignDef[], face: Face = { brows: 0, headshake: f
   let t = MOTION.fromRest;
   const out: TimedSign[] = [];
   signs.forEach((sign, index) => {
-    if (index > 0) t += MOTION.transition;
+    const prev = signs[index - 1];
+    if (index > 0) t += prev?.spell && sign.spell && prev.spell.word === sign.spell.word ? MOTION.letterTransition : MOTION.transition;
     const dur = signDuration(sign);
     out.push({ sign, start: t, end: t + dur, hold: t + dur + gap, index });
     t += dur + gap;
@@ -294,7 +308,7 @@ export function frameAt(tl: Timeline, time: number): Frame {
     right: placeHand(s.right.local, s.right.orient, s.right.wrist, false),
     left: placeHand(s.left.local, s.left.orient, s.left.wrist, true),
     active: s.active,
-    face: { brows, yaw: shaking ? 0.22 * Math.sin(time * 2 * Math.PI * 2.6) : 0, tilt: brows > 0 ? 0.06 : 0 },
+    face: { brows, yaw: shaking ? 0.22 * Math.sin(time * 2 * Math.PI * 2.6) : 0, tilt: brows > 0 ? 0.06 : 0, shake: shaking },
     rightUp: s.rightUp,
     leftUp: s.leftUp,
   };

@@ -7,6 +7,7 @@
  * These are common textbook patterns; real ASL grammar (classifiers, role shift) is richer still.
  */
 import type { Loc } from '../asl/body';
+import { fingerspell, spelledGloss } from '../asl/fingerspell';
 import type { Mark, SignDef } from '../asl/sign';
 import { directed, GRAMMAR, negIncorporate, onTimeLine, pointTo, withRedup, type Locus } from './grammar';
 import type { SignLanguage, SpokenLanguage, Token, Translation } from './types';
@@ -75,7 +76,7 @@ export const english: SpokenLanguage = {
     if (!index) INDEX_CACHE.set(lang, (index = indexFor(lang)));
     const raw = text.toLowerCase().replace(/[’‘]/g, "'").trim();
     const sentences = raw.split(/(?<=[?.!])\s+/).map((x) => x.trim()).filter(Boolean);
-    const ctx: Ctx = { lang, index, loci: new Map(), next: 0, last: null };
+    const ctx: Ctx = { lang, index, loci: new Map(), next: 0, last: null, names: namesIn(text) };
     const out: Part = { tokens: [], entries: [], marks: [], negated: [] };
     let yn = false, wh = false;
     sentences.forEach((sen, si) => {
@@ -87,15 +88,24 @@ export const english: SpokenLanguage = {
       if (k === 'wh') wh = true;
       append(out, sentence(sen, ctx, k));
     });
-    const signs = out.entries.map((e) => e.sign);
-    const marks = out.marks.filter((m) => m.from <= m.to && m.to < signs.length);
+    // A spelled word is one entry while the grammar works on it; here it opens out into its letters.
+    const signs: SignDef[] = [];
+    const at: [number, number][] = [];
+    for (const e of out.entries) {
+      const first = signs.length;
+      signs.push(...(e.letters ?? [e.sign]));
+      at.push([first, signs.length - 1]);
+    }
+    const marks = out.marks.filter((m) => m.from <= m.to && at[m.to]).map((m) => ({ ...m, from: at[m.from]![0], to: at[m.to]![1] }));
+    const negated = out.negated.flatMap((i) => (at[i] ? Array.from({ length: at[i]![1] - at[i]![0] + 1 }, (_, k) => at[i]![0] + k) : []));
     return {
       tokens: out.tokens,
       signs,
-      face: { brows: wh ? -1 : yn ? 1 : 0, headshake: out.negated.length > 0 },
-      negated: out.negated,
+      face: { brows: wh ? -1 : yn ? 1 : 0, headshake: negated.length > 0 },
+      negated,
       marks,
       missing: out.tokens.filter((t) => !t.gloss).map((t) => t.words),
+      spelled: out.entries.filter((e) => e.letters).map((e) => e.words),
     };
   },
 
@@ -159,6 +169,10 @@ interface Entry {
   pron?: boolean;
   /** A plural noun ("books"). */
   plural?: boolean;
+  /** A word with no sign, spelled out: its letters (sign is the first). */
+  letters?: SignDef[];
+  /** A spelled word that is someone's name (capitalized mid-sentence). */
+  name?: boolean;
   drop?: boolean;
 }
 
@@ -171,6 +185,21 @@ interface Ctx {
   loci: Map<string, Locus>;
   next: number;
   last: Locus | null;
+  /** Lower-cased words written with a capital mid-sentence: names. */
+  names: Set<string>;
+}
+
+/**
+ * Capitalized words: taken as names when they also have no sign (only spelled words consult this), so a
+ * name at the start of a sentence counts too, and ordinary capitalized words that have signs don't.
+ */
+function namesIn(text: string): Set<string> {
+  const out = new Set<string>();
+  for (const w of text.split(/\s+/)) {
+    const bare = w.replace(/[^A-Za-z']/g, '');
+    if (/^[A-Z][a-z]/.test(bare)) out.add(bare.toLowerCase());
+  }
+  return out;
 }
 
 function questionKind(sen: string): QKind {
@@ -308,7 +337,14 @@ function clause(text: string, ctx: Ctx, kind: QKind): Part {
     }
     if (matched) continue;
     const w = words[i]!;
-    if (!DROP.has(w)) tokens.push({ words: w, gloss: null });
+    if (!DROP.has(w)) {
+      // No sign: spell it (names, new words, numbers above five).
+      const letters = fingerspell(w);
+      if (letters.length) {
+        tokens.push({ words: w, gloss: spelledGloss(w) });
+        entries.push({ sign: letters[0]!, words: w, letters, name: ctx.names.has(w) });
+      } else tokens.push({ words: w, gloss: null });
+    }
     i++;
   }
 
@@ -321,7 +357,8 @@ function clause(text: string, ctx: Ctx, kind: QKind): Part {
     const fin = lang.bySign('FINISH');
     if (fin) order.push({ sign: fin, words: '' });
   }
-  order = order.filter((e, i) => e.sign.gloss !== order[i - 1]?.sign.gloss);
+  const key = (e: Entry | undefined) => (e?.letters ? `fs:${e.words}` : e?.sign.gloss);
+  order = order.filter((e, i) => key(e) !== key(order[i - 1]));
 
   // People in space: a referent gets a locus (pointed to after its first mention); pronouns point back.
   const ix = lang.bySign('HE-SHE');
@@ -332,8 +369,10 @@ function clause(text: string, ctx: Ctx, kind: QKind): Part {
     const plural = !!e.plural;
     const prev = placed[placed.length - 1];
     if (plural && GRAMMAR.pluralRedup.has(g) && !(prev && GRAMMAR.quantifiers.has(prev.sign.gloss))) e.sign = withRedup(e.sign, 'plural');
-    if (GRAMMAR.referents.has(g) && ix) {
-      const { locus, fresh } = locusFor(ctx, g);
+    // a person's name ("Jordan helps me"), but not when it's what someone is called ("my name is Jordan")
+    const isName = !!e.name && prev?.sign.gloss !== 'NAME';
+    if ((GRAMMAR.referents.has(g) || isName) && ix) {
+      const { locus, fresh } = locusFor(ctx, isName ? `name:${e.words}` : g);
       ctx.last = locus;
       e.locus = locus;
       placed.push(e);

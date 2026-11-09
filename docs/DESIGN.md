@@ -12,6 +12,11 @@ J picked this from three sketches: the dark silhouette look ("B") with the sign-
 - Motion is shown with 2 ghost frames of earlier positions (14% and 28% opacity) and a dotted accent trail with an arrowhead.
 - The location is marked by an accent ring at the place the sign happens (for example, the temple).
 
+## Face (only when grammar needs it)
+- Thin ink lines (brows, eyes, mouth) inside the dashed head guide, about 70% opacity, fading in over ~160 ms and out again.
+- They show only while a non-manual marker is on: raised brows (yes/no question, topic, conditional, rhetorical), furrowed brows (WH-question), or a headshake (the features turn side to side, and the mouth turns down).
+- The rest of the time, there is just the dashed guide.
+
 ## Layout (phone first)
 1. Header: "ASL" on the left, and a Speak / Read segmented switch.
 2. Sentence progress: one thin bar per sign, filling as each sign plays.

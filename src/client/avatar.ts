@@ -4,6 +4,9 @@
  * below the head guide. The dominant arm is light ink, the other dim; two ghost frames and a dotted trail show the
  * movement, and an accent ring marks where the sign is made. The view looks down a little, so a palm held flat
  * shows as a foreshortened palm rather than an edge.
+ *
+ * A face appears only while ASL grammar is on it (question or topic brows, a headshake): thin lines for brows,
+ * eyes and mouth inside the dashed head guide, faded in and out. The rest of the time there is just the guide.
  */
 import { BASE_LOCS, FOREARM, LOCATIONS, SHOULDER, UPPER_ARM, type Loc } from '../asl/body';
 import type { Landmarks } from '../asl/hand';
@@ -38,7 +41,20 @@ export const AVATAR = {
   trailMinPx: 18,
   /** Location ring radius, in body units. */
   ringRadius: 0.09,
+  /** The grammar face: fade time, line strength and how far a headshake turns the features. */
+  face: { fadeMs: 160, alpha: 0.7, line: 1.6, turn: 0.8 },
 };
+
+/** Pure: whether the face should show: brows raised or furrowed, or a headshake on. */
+export function faceShown(face: Frame['face']): boolean {
+  return Math.abs(face.brows) > 0.01 || face.shake;
+}
+
+/** Pure: the face's fade level after dtMs, easing toward shown (1) or hidden (0). */
+export function faceStep(level: number, shown: boolean, dtMs: number): number {
+  const k = Math.min(1, Math.max(0, dtMs) / AVATAR.face.fadeMs);
+  return level + ((shown ? 1 : 0) - level) * k;
+}
 
 interface Colors { ink: string; dim: string; guide: string; accent: string; glow: string; bg: string }
 
@@ -96,6 +112,10 @@ export class Avatar {
   private history: Past[] = [];
   private marker: Loc | null = null;
   private ghostCanvas: HTMLCanvasElement;
+  private faceLevel = 0;
+  private faceBrows = 0;
+  private faceFrown = false;
+  private lastDraw = 0;
 
   constructor(private canvas: HTMLCanvasElement) {
     const ctx = canvas.getContext('2d');
@@ -157,6 +177,13 @@ export class Avatar {
     ctx.stroke();
     ctx.restore();
 
+    // The face, only while grammar is on it; it keeps its last expression while it fades out.
+    const shown = faceShown(f.face);
+    if (shown) { this.faceBrows = f.face.brows; this.faceFrown = f.face.shake; }
+    this.faceLevel = faceStep(this.faceLevel, shown, this.lastDraw ? now - this.lastDraw : 0);
+    this.lastDraw = now;
+    if (this.faceLevel > 0.02) this.face(head, f.face);
+
     this.history.push({ at: now, lm: f.right, up: f.rightUp });
     const keep = Math.max(AVATAR.trailMs, ...AVATAR.ghosts.map((x) => x.agoMs)) + 100;
     while (this.history.length && now - this.history[0]!.at > keep) this.history.shift();
@@ -180,6 +207,39 @@ export class Avatar {
     this.trail(now);
     this.ring(f);
     this.arm(ctx, f.right, false, C.ink, f.rightUp);
+  }
+
+  /** Brows, eyes and mouth as thin lines inside the head guide. */
+  private face(head: { x: number; y: number }, fc: Frame['face']): void {
+    const { ctx, colors: C } = this;
+    const rx = AVATAR.headRadius[0] * this.S, ry = AVATAR.headRadius[1] * this.S;
+    const b = this.faceBrows;
+    ctx.save();
+    ctx.translate(head.x + fc.yaw * rx * AVATAR.face.turn * (AVATAR.mirror ? -1 : 1), head.y);
+    ctx.rotate(fc.tilt);
+    ctx.globalAlpha = this.faceLevel * AVATAR.face.alpha;
+    ctx.strokeStyle = C.ink;
+    ctx.lineWidth = AVATAR.face.line;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (const side of [-1, 1]) {
+      // raised brows sit higher and arch; furrowed ones drop and slope down toward the middle
+      const y = -0.3 * ry - b * 0.09 * ry;
+      const inner = y + (b < 0 ? -b * 0.08 * ry : 0);
+      const x0 = side * 0.14 * rx, x1 = side * 0.56 * rx;
+      ctx.moveTo(x0, inner);
+      ctx.quadraticCurveTo((x0 + x1) / 2, y - 0.05 * ry * (1 + Math.max(0, b)), x1, y + 0.02 * ry);
+      // eyes: short strokes, narrower when furrowed
+      const ew = (b < 0 ? 0.12 : 0.16) * rx;
+      ctx.moveTo(side * 0.35 * rx - ew / 2, -0.1 * ry);
+      ctx.lineTo(side * 0.35 * rx + ew / 2, -0.1 * ry);
+    }
+    // mouth: flat, or turned down with a headshake
+    const my = 0.42 * ry, mw = 0.2 * rx;
+    ctx.moveTo(-mw, my + (this.faceFrown ? 0.03 * ry : 0));
+    ctx.quadraticCurveTo(0, my - (this.faceFrown ? 0.05 * ry : 0), mw, my + (this.faceFrown ? 0.03 * ry : 0));
+    ctx.stroke();
+    ctx.restore();
   }
 
   private trail(now: number): void {

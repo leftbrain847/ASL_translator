@@ -138,7 +138,7 @@ function app(): HTMLElement {
   const footer = h('footer', { class: 'foot' }, [
     dictBtn, dict,
     h('p', {}, ['Prototype. Signs are written from dictionary descriptions and have not yet been reviewed by a Deaf signer. ' +
-      'Recognition has been tested on synthetic camera data only. Grammar follows common textbook rules (topics, signing space, directional verbs), also unreviewed; names and words without a sign are skipped, not fingerspelled.']),
+      'Recognition has been tested on synthetic camera data only. Grammar follows common textbook rules (topics, signing space, directional verbs), also unreviewed; names and words without a sign are fingerspelled.']),
   ]);
 
   for (const n of [header, speakPanel, readPanel, footer]) main.appendChild(n);
@@ -163,7 +163,17 @@ function app(): HTMLElement {
 
   const showChips = (t: Translation, active: number) => {
     const kids: Node[] = [];
-    t.signs.forEach((s, i) => kids.push(h('span', { class: `chip${i === active ? ' on' : ''}${t.negated.includes(i) ? ' neg' : ''}`, title: s.how }, [s.gloss])));
+    t.signs.forEach((s, i) => {
+      if (s.spell) {
+        // a spelled word is one chip (J-O-R-D-A-N), lit while any of its letters is made
+        if (s.spell.i > 0) return;
+        const n = s.spell.word.length;
+        const on = active >= i && active < i + n;
+        kids.push(h('span', { class: `chip spelled${on ? ' on' : ''}${t.negated.includes(i) ? ' neg' : ''}`, title: 'Fingerspelled' }, [s.spell.word.toUpperCase().split('').join('-')]));
+        return;
+      }
+      kids.push(h('span', { class: `chip${i === active ? ' on' : ''}${t.negated.includes(i) ? ' neg' : ''}`, title: s.how }, [s.gloss]));
+    });
     for (const m of t.missing) kids.push(h('span', { class: 'chip missing', title: 'No sign for this word yet' }, [m]));
     chips.replaceChildren(...kids);
   };
@@ -171,7 +181,11 @@ function app(): HTMLElement {
   /** One thin bar per sign; filled while it plays. */
   const bars = (n: number) => progress.replaceChildren(...Array.from({ length: n }, () => h('i', {}, [h('span')])));
   const showSign = (s: SignDef | undefined) => {
-    nowWord.textContent = s ? s.en[0]! : '';
+    if (s?.spell) {
+      // the spelled word, its current letter lit
+      const w = s.spell.word;
+      nowWord.replaceChildren(...Array.from(w, (ch, i) => h('span', { class: i === s.spell!.i ? 'lt on' : 'lt' }, [ch])));
+    } else nowWord.textContent = s ? s.en[0]! : '';
     const pp = s ? signParts(s) : null;
     for (const [k, x] of Object.entries(parts)) x.v.textContent = pp ? pp[k as keyof typeof pp] : '';
     partsRow.classList.toggle('empty', !pp);
@@ -197,6 +211,7 @@ function app(): HTMLElement {
     if (t.marks.some((m) => m.kind === 'topic')) bits.push('Raised brows: the topic comes first.');
     if (t.marks.some((m) => m.kind === 'cond')) bits.push('Raised brows: the condition comes first.');
     if (t.marks.some((m) => m.kind === 'rhet')) bits.push('Raised brows: a rhetorical question, then the answer.');
+    if (t.spelled.length) bits.push(`Fingerspelled (no sign yet): ${t.spelled.join(', ')}.`);
     if (t.missing.length) bits.push(`No sign yet for: ${t.missing.join(', ')}.`);
     if (!t.signs.length) bits.unshift('None of those words are in the vocabulary yet.');
     note.textContent = bits.join(' ');
@@ -212,7 +227,7 @@ function app(): HTMLElement {
   };
 
   const playSign = (s: SignDef) => {
-    const t: Translation = { tokens: [{ words: s.en[0]!, gloss: s.gloss }], signs: [s], face: { brows: 0, headshake: false }, negated: [], marks: [], missing: [] };
+    const t: Translation = { tokens: [{ words: s.en[0]!, gloss: s.gloss }], signs: [s], face: { brows: 0, headshake: false }, negated: [], marks: [], missing: [], spelled: [] };
     current = t;
     showChips(t, -1);
     note.textContent = s.en.join(', ');

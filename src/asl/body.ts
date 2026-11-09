@@ -47,6 +47,7 @@ export const LOCATIONS = {
   faceFront: [0.1, 0.8, -0.55],
   headSide: [0.42, 0.92, -0.25],
   side: [0.62, -0.3, -0.42],
+  spell: [0.34, -0.06, -0.5],    // the wrist, for fingerspelling: in front of the dominant shoulder
   // Places in signing space for people and things talked about (loci), and the signer's and addressee's
   // ends of a directional verb.
   locusA: [0.55, -0.3, -0.6],
